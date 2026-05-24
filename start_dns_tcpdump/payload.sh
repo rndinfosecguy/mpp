@@ -11,7 +11,7 @@ if [ ! -d "/root/loot/mpp" ]; then
 fi
 
 # generate unique pcap filename
-CAPTURE_FILE="/root/loot/mpp/dns_capture_"
+CAPTURE_FILE="/root/loot/mpp/dns_"
 CURRENT_TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 CAPTURE_FILE_CONTENT="${CAPTURE_FILE}${CURRENT_TIMESTAMP}.pcap"
 echo "${CAPTURE_FILE_CONTENT}"
