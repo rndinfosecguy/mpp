@@ -52,7 +52,7 @@ Kills the python web server.
 
 ### UI Preview
 
-![default dashboard](readme_assets/dashboard_default.png)
+<img src="readme_assets/dashboard_default.png" alt="default dashboard" width="300">
 ![dashboard apps](readme_assets/dashboard_apps.png)
 ![dashboard creds](readme_assets/dashboard_creds.png)
 
