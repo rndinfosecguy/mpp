@@ -1,0 +1,361 @@
+#!/usr/bin/env python3
+import sqlite3
+
+print("Content-Type: text/html")
+print()
+
+print("<html>")
+print("<body>")
+
+head = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MPP Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0f172a, #111827);
+      color: #f8fafc;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header {
+      margin-bottom: 40px;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 3rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      background: linear-gradient(to right, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .header p {
+      color: #94a3b8;
+      font-size: 1.1rem;
+    }
+
+    .table-wrapper {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      border-radius: 24px;
+      overflow: hidden;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead {
+      background: rgba(30, 41, 59, 0.9);
+    }
+
+    thead th {
+      text-align: left;
+      padding: 22px 28px;
+      font-size: 0.95rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #cbd5e1;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+    }
+
+    tbody tr.ip-row {
+      background: rgba(15, 23, 42, 0.55);
+      transition: all 0.25s ease;
+    }
+
+    tbody tr.ip-row:hover {
+      background: rgba(30, 41, 59, 0.8);
+    }
+
+    tbody tr.stats-row {
+      background: rgba(2, 6, 23, 0.6);
+    }
+
+    td {
+      padding: 20px 28px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+      vertical-align: top;
+    }
+
+    .ip-link {
+      display: inline-block;
+      color: #38bdf8;
+      font-size: 1.1rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: color 0.2s ease;
+      word-break: break-all;
+    }
+
+    .ip-link:hover {
+      color: #7dd3fc;
+    }
+
+    .ip-meta {
+      margin-top: 8px;
+      color: #94a3b8;
+      font-size: 0.9rem;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+    }
+
+    .stat-card {
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid rgba(148, 163, 184, 0.08);
+      border-radius: 16px;
+      padding: 16px;
+    }
+
+    .stat-label {
+      color: #94a3b8;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-value {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #f8fafc;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .online {
+      background: rgba(34, 197, 94, 0.15);
+      color: #4ade80;
+    }
+
+    .offline {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+    }
+
+    .search-container {
+      margin-top: 24px;
+      display: flex;
+      justify-content: center;
+    }
+
+    #searchInput {
+      width: 100%;
+      max-width: 500px;
+      padding: 16px 20px;
+      border-radius: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: rgba(15, 23, 42, 0.85);
+      color: #f8fafc;
+      font-size: 1rem;
+      outline: none;
+      transition: all 0.25s ease;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+    }
+
+    #searchInput:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.15);
+    }
+
+    #searchInput::placeholder {
+      color: #94a3b8;
+    }
+
+    @media (max-width: 768px) {
+      .header h1 {
+        font-size: 2rem;
+      }
+
+      td, thead th {
+        padding: 18px;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>MPP Dashboard</h1>
+      <p>Track your engagements.</p>
+      
+      <div class="search-container">
+        <input
+          type="text"
+          id="searchInput"
+          placeholder="Search..."
+          onkeyup="filterIPs()"
+        />
+      </div>
+    </div>
+
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>IP Addresses</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+"""
+
+ip_block = """
+          <!-- IP Block -->
+          <tr class="ip-row">
+            <td>
+              <a href="<IP_ADDRESS>" class="ip-link" target="_blank">
+                <IP_ADDRESS>
+              </a>
+              <div class="ip-meta"><MACADDRESS></div>
+            </td>
+
+          </tr>
+"""
+
+stat = """
+                <div class="stat-card">
+                  <div class="stat-label"><APP></div>
+                  <div class="stat-value"><APPNAME></div>
+                </div>
+"""
+
+stat_grid_start = """
+          <tr class="stats-row">
+            <td colspan="2">
+              <div class="stats-grid">
+"""
+
+stat_grid_end = """
+              </div>
+            </td>
+          </tr>
+"""
+
+footer = """
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <script>
+    function filterIPs() {
+      const input = document.getElementById('searchInput');
+      const filter = input.value.toLowerCase();
+      const tbody = document.querySelector('tbody');
+      const rows = tbody.querySelectorAll('tr');
+
+      for (let i = 0; i < rows.length; i += 2) {
+        const ipRow = rows[i];
+        const statsRow = rows[i + 1];
+
+        const ipText = ipRow.innerText.toLowerCase();
+        const statsText = statsRow.innerText.toLowerCase();
+        const combinedText = ipText + ' ' + statsText;
+
+        if (combinedText.includes(filter)) {
+          ipRow.style.display = '';
+          statsRow.style.display = '';
+        } else {
+          ipRow.style.display = 'none';
+          statsRow.style.display = 'none';
+        }
+      }
+    }
+  </script>
+</body>
+</html>
+"""
+
+print(head)
+
+# Connect to the SQLite database
+conn = sqlite3.connect('../data.db')
+
+# Create a cursor object
+c = conn.cursor()
+
+# Perform a SELECT statement on the 'targets' table, storing the IP and MAC combination in variables
+c.execute("SELECT id, ip, mac FROM targets")
+rows = c.fetchall()
+ip_mac_combinations = [(row[0], row[1], row[2]) for row in rows]
+
+for id, ip, mac in ip_mac_combinations:
+  # print IP block
+  tmp = ip_block.replace("<IP_ADDRESS>", ip)
+  tmp = tmp.replace("<MACADDRESS>", mac)
+  print(tmp)
+  print(stat_grid_start)
+  
+  # credentials
+  tmp = stat.replace("<APP>", "Credentials")
+  c.execute("SELECT count(id) FROM credentials WHERE target=" + str(id))
+  row = c.fetchone()
+  if (int(row[0]) > 0):
+    c.execute("SELECT username, password FROM credentials WHERE target=" + str(id))
+    pwRow = c.fetchone()
+    tmp = tmp.replace("<APPNAME>", "<span class=\"status online\">user: " + pwRow[0] + "<br />password: " + pwRow[1] + "</span>")
+  else:
+    tmp = tmp.replace("<APPNAME>", "<span class=\"status offline\">n/a</span>")
+  print(tmp)
+  
+  # print apps
+  c.execute("SELECT appname from targetapps WHERE target=" + str(id))
+  rows = c.fetchall()
+  app_combination = [(row[0]) for row in rows]
+  
+  for appname in app_combination:
+    c.execute("SELECT app from apps WHERE id=" + str(appname))
+    rows = c.fetchall()
+    app_names = [(row[0]) for row in rows]
+    for app in app_names:
+      tmp = stat.replace("<APP>", "Device/App")
+      tmp = tmp.replace("<APPNAME>", app)
+      print(tmp)
+  
+  print(stat_grid_end)
+
+print(footer)
+print("</body>")
+print("</html>")
+
+# Close the connection to the database
+conn.close()
