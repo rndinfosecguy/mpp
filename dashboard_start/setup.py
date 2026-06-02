@@ -1,6 +1,7 @@
 import os
 from scapy.all import rdpcap, IP, DNS, DNSQR, Ether
 import sqlite3
+import time
 
 def parse_credential_file(filename):
     results = []
@@ -21,7 +22,7 @@ def parse_credential_file(filename):
             # Match key: value lines
             if ":" in line:
                 key, value = map(str.strip, line.split(":", 1))
-                if key in ["email", "password", "ip"]:
+                if key in ["email", "password", "ip", "hostname"]:
                     block[key] = value
 
         # Add last block if file doesn't end with newline
@@ -40,6 +41,7 @@ def print_a_record_requests(pcap_file):
             
             src_ip = pkt[IP].src
             mac_addr = pkt[Ether].src
+            packet_time = pkt.time
 
             # qr == 0 means DNS request (not response)
             if dns.qr == 0:
@@ -62,14 +64,23 @@ def print_a_record_requests(pcap_file):
                     if result is None:
                         # Create a new target entry
                         query = """
-                            INSERT INTO targets (ip, mac)
-                            VALUES (?, ?)
+                            INSERT INTO targets (ip, mac, pcap, date)
+                            VALUES (?, ?, ?, ?)
                         """
-                        parameters = (ip, mac_addr)
+                        parameters = (ip, mac_addr, pcap_file, str(packet_time))
                         TmpCursor.execute(query, parameters)
                         TmpConn.commit()
                         print()
                         print(f"[+] New target added for {ip}")
+                    
+                    # insert dns queries in database
+                    query_target_id = """SELECT id FROM targets WHERE ip=?"""
+                    parameters_ip = (ip,)
+                    result_id = TmpCursor.execute(query_target_id, parameters_ip).fetchone()
+                    insert_query = "INSERT INTO dns_queries (ip, query) VALUES (?, ?)"
+                    parameters_query = (result_id[0], domain)
+                    TmpCursor.execute(insert_query, parameters_query)
+                    TmpConn.commit()              
                     
                     # look for domain/app
                     query_app = """SELECT searchstring FROM apps """
@@ -106,7 +117,10 @@ def print_a_record_requests(pcap_file):
                     TmpConn.close()
                     
                     # get search strings
-       
+
+loot_folder = "/mmc/root/loot/mpp/"
+credentials_file = "/mmc/root/logs/credentials.json"
+   
 print("[*] Checking for database file...")
 if not os.path.exists('data.db'):
     print("\t[-] Database file does not exist, creating it...")
@@ -120,7 +134,7 @@ print()
 conn = sqlite3.connect('data.db')
 cursor = conn.cursor()
 
-pcap_files = [file for file in os.listdir('/mmc/root/loot/mpp') if file.endswith('.pcap')]
+pcap_files = [file for file in os.listdir(loot_folder) if file.endswith('.pcap')]
 
 print(f"[+] Found {len(pcap_files)} PCAP files: {', '.join(pcap_files)}")
 
@@ -137,7 +151,7 @@ new_pcap_files = set(pcap_files) - set(existing_pcap_files)
 conn.close()
 
 for pcapFile in new_pcap_files:
-    print_a_record_requests("/mmc/root/loot/mpp/" + pcapFile) 
+    print_a_record_requests(loot_folder + pcapFile) 
     
     conn = sqlite3.connect('data.db')
     cursor = conn.cursor()
@@ -149,15 +163,15 @@ for pcapFile in new_pcap_files:
 # check for credentials
 print()
 print("[*] Checking for credentials")
-creds = parse_credential_file("/mmc/root/logs/credentials.json") 
+creds = parse_credential_file(credentials_file) 
 conn = sqlite3.connect('data.db')
 c = conn.cursor()
 for cred in creds:
     c.execute("SELECT id FROM targets where ip=\"" + cred["ip"] + "\"")
     ip_id = c.fetchone()
     if ip_id is None:
-        query = "INSERT INTO targets (ip, mac) VALUES (?, ?)"
-        c.execute(query, (cred["ip"], "00:00:00:00:00:00"))
+        query = "INSERT INTO targets (ip, mac, pcap, date) VALUES (?, ?, ?, ?)"
+        c.execute(query, (cred["ip"], "00:00:00:00:00:00", "n/a", str(time.time())))
         conn.commit()
         
         c.execute("SELECT id FROM targets where ip=\"" + cred["ip"] + "\"")
@@ -167,8 +181,8 @@ for cred in creds:
     row = c.fetchone()
     row = row[0]
     if row == 0:
-        query = "INSERT INTO credentials (username, password, target) VALUES (?, ?, ?)"
-        c.execute(query, (cred['email'], cred['password'], str(ip_id[0])))
+        query = "INSERT INTO credentials (username, password, target, hostname) VALUES (?, ?, ?, ?)"
+        c.execute(query, (cred['email'], cred['password'], str(ip_id[0]), cred['hostname']))
         conn.commit()
         print("\t[+] Added credentials -> " + cred["email"] + ":" + cred["password"])
 

@@ -8,7 +8,17 @@ cursor.execute("""
 CREATE TABLE IF NOT EXISTS targets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ip TEXT NOT NULL,
-    mac TEXT NOT NULL
+    mac TEXT NOT NULL,
+    pcap TEXT NOT NULL,
+    date TEXT NOT NULL
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS dns_queries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip INTEGER NOT NULL,
+    query TEXT NOT NULL
 )
 """)
 
@@ -17,7 +27,8 @@ CREATE TABLE IF NOT EXISTS credentials (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL,
     password TEXT NOT NULL,
-    target INTEGER
+    target INTEGER,
+    hostname TEXT NOT NULL
 )
 """)
 
@@ -63,7 +74,18 @@ apps = [
     ("Android", "android"),
     ("Amazon", "amazon"),
     ("Rewe", "rewe"),
-    ("Google", "google")
+    ("Google", "google"),
+    ("Google", "gstatic"),
+    ("YouTube", "youtube"),
+    ("Xiaomi", "xiaomi"),
+    ("Baidu", "baidu"),
+    ("iPhone", "captive.apple"),
+    ("Snapchat", "snapchat"),
+    ("Soundcloud", "soundcloud"),
+    ("Amazon", "amazon"),
+    ("Duolingo", "duolingo"),
+    ("Firefox", "firefox"),
+    ("Signal", "signal")
 ]
 
 cursor.executemany(
