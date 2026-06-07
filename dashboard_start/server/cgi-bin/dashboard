@@ -233,7 +233,7 @@ head = """
       <table>
         <thead>
           <tr>
-            <th>IP Addresses</th>
+            <th><NUMBEROFIPS> ip addresses, <NUMBEROFCREDS> credentials</th>
             <th></th>
           </tr>
         </thead>
@@ -307,9 +307,6 @@ footer = """
 </body>
 </html>
 """
-
-print(head)
-
 # Connect to the SQLite database
 conn = sqlite3.connect('../data.db')
 
@@ -321,6 +318,9 @@ c.execute("SELECT id, ip, mac, pcap, date FROM targets")
 rows = c.fetchall()
 ip_mac_combinations = [(row[0], row[1], row[2], row[3], row[4]) for row in rows]
 
+entries = ""
+number_of_credentials = 0
+number_of_entries = 0
 for id, ip, mac, pcap, date in ip_mac_combinations:
   # print IP block
   tmp = ip_block.replace("<IP_ADDRESS>", ip)
@@ -332,10 +332,9 @@ for id, ip, mac, pcap, date in ip_mac_combinations:
   
   # adding date...
   readable_date = datetime.fromtimestamp(int(float(date))).strftime('%Y-%m-%d %H:%M:%S')
-  tmp = tmp.replace("<DATE>", readable_date.split(" ")[0])
-  
-  print(tmp)
-  print(stat_grid_start)
+  ip_output = tmp.replace("<DATE>", readable_date.split(" ")[0])
+  entries += ip_output
+  entries += stat_grid_start
   
   # credentials
   tmp = stat.replace("<APP>", "Credentials")
@@ -346,20 +345,21 @@ for id, ip, mac, pcap, date in ip_mac_combinations:
     c.execute("SELECT username, password, hostname FROM credentials WHERE target=" + str(id))
     pwRow = c.fetchone()
     hostname = pwRow[2]
-    tmp = tmp.replace("<APPNAME>", "<span class=\"status online\">user: " + pwRow[0] + "<br />password: " + pwRow[1] + "</span>")
+    credentials_output = tmp.replace("<APPNAME>", "<span class=\"status online\">user: " + pwRow[0] + "<br />password: " + pwRow[1] + "</span>")
+    number_of_credentials += 1
   else:
-    tmp = tmp.replace("<APPNAME>", "<span class=\"status offline\">n/a</span>")
-  print(tmp)
+    credentials_output = tmp.replace("<APPNAME>", "<span class=\"status offline\">n/a</span>")
+  entries += credentials_output
   
   # mac
   tmp = stat.replace("<APP>", "MAC")
-  tmp = tmp.replace("<APPNAME>", mac)
-  print(tmp)
+  mac_output = tmp.replace("<APPNAME>", mac)
+  entries += mac_output
   
   # hostname
   tmp = stat.replace("<APP>", "HOSTNAME")
-  tmp = tmp.replace("<APPNAME>", hostname)
-  print(tmp)
+  hostname_output = tmp.replace("<APPNAME>", hostname)
+  entries += hostname_output
   
   # print apps
   c.execute("SELECT appname from targetapps WHERE target=" + str(id))
@@ -367,6 +367,7 @@ for id, ip, mac, pcap, date in ip_mac_combinations:
   app_combination = [(row[0]) for row in rows]
   
   different_apps = set()
+  apps_output = ""
   for appname in app_combination:
     c.execute("SELECT app from apps WHERE id=" + str(appname))
     rows = c.fetchall()
@@ -376,10 +377,15 @@ for id, ip, mac, pcap, date in ip_mac_combinations:
         tmp = stat.replace("<APP>", "Device/App")
         tmp = tmp.replace("<APPNAME>", app)
         different_apps.add(app)
-        print(tmp)
-  
-  print(stat_grid_end)
+        apps_output += tmp
+  entries += apps_output
+  entries += stat_grid_end
+  number_of_entries += 1
 
+head = head.replace("<NUMBEROFIPS>", str(number_of_entries))
+head = head.replace("<NUMBEROFCREDS>", str(number_of_credentials))
+print(head)
+print(entries)
 print(footer)
 print("</body>")
 print("</html>")
