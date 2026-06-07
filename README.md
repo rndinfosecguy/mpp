@@ -1,6 +1,7 @@
 # mpp
 
-My Pineapple Pager Payloads
+My Pineapple Pager Payloads.
+The core of the repository is a dashboard which analyzes DNS traffic intercepted on `wlan0open` on the Wifi Pineapple Pager to fingerpint devices.
 
 ## Features
 
