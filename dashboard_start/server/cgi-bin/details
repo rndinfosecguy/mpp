@@ -272,7 +272,7 @@ row = c.fetchone()
 if int(row[0]) == 1:
   c.execute("SELECT username, password, hostname FROM credentials WHERE target=?", (ip_id,))
   row = c.fetchone()
-  tmp = tmp.replace("<CREDS>", "user:" + row[0] + " password:" + row[1])
+  tmp = tmp.replace("<CREDS>", "user:" + row[0] + " pass:" + row[1])
   tmp = tmp.replace("<HOSTNAME>", row[2])
 else:
   tmp = tmp.replace("<CREDS>", "n/a")

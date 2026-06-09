@@ -120,6 +120,7 @@ def print_a_record_requests(pcap_file):
 
 loot_folder = "/mmc/root/loot/mpp/"
 credentials_file = "/mmc/root/logs/credentials.json"
+credentials_file = "/mmc/root/logs/hostnames.csv"
    
 print("[*] Checking for database file...")
 if not os.path.exists('data.db'):
@@ -177,13 +178,46 @@ for cred in creds:
         c.execute("SELECT id FROM targets where ip=\"" + cred["ip"] + "\"")
         ip_id = c.fetchone()
     
-    c.execute("SELECT count(id) FROM credentials WHERE target=" + str(ip_id[0]))
+    c.execute("SELECT count(id), username FROM credentials WHERE target=" + str(ip_id[0]))
     row = c.fetchone()
-    row = row[0]
-    if row == 0:
+    count = row[0]
+    username = row[1]
+    if count == 0:
         query = "INSERT INTO credentials (username, password, target, hostname) VALUES (?, ?, ?, ?)"
         c.execute(query, (cred['email'], cred['password'], str(ip_id[0]), cred['hostname']))
         conn.commit()
         print("\t[+] Added credentials -> " + cred["email"] + ":" + cred["password"])
+    if username == "NONE":
+        query = "UPDATE credentials SET username=?, password=? WHERE target=?"
+        c.execute(query, (cred['email'], cred['password'], str(ip_id[0])))
+        conn.commit()
+        print("\t[+] Added credentials -> " + cred["email"] + ":" + cred["password"])
+
+# check for hostnames
+print()
+print("[*] Checking for hostnames")
+f = open(hostnames_file, "r")
+hostnames = f.readlines()
+f.close()
+
+unique_hostnames = set()
+for hostname in hostnames:
+    hostname = hostname.strip()
+    unique_hostnames.add(hostname)
+
+for hostname in unique_hostnames:
+    mac, name = hostname.split(",")
+    c.execute("SELECT id FROM targets where mac=\"" + mac + "\"")
+    mac_id = c.fetchone()
+    
+    if mac_id is not None:
+        c.execute("SELECT count(id) FROM credentials WHERE target=" + str(mac_id[0]))
+        row = c.fetchone()
+        row = row[0]
+        if row == 0:
+            query = "INSERT INTO credentials (username, password, target, hostname) VALUES (?, ?, ?, ?)"
+            c.execute(query, ("NONE", "NONE", str(mac_id[0]), name))
+            conn.commit()
+            print("\t[+] Added hostname -> " + name)
 
 c.close()

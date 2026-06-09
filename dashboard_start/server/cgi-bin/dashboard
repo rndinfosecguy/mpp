@@ -345,8 +345,9 @@ for id, ip, mac, pcap, date in ip_mac_combinations:
     c.execute("SELECT username, password, hostname FROM credentials WHERE target=" + str(id))
     pwRow = c.fetchone()
     hostname = pwRow[2]
-    credentials_output = tmp.replace("<APPNAME>", "<span class=\"status online\">user: " + pwRow[0] + "<br />password: " + pwRow[1] + "</span>")
-    number_of_credentials += 1
+    if pwRow[0] != "NONE":
+      credentials_output = tmp.replace("<APPNAME>", "<span class=\"status online\">user: " + pwRow[0] + "<br />pass : " + pwRow[1] + "</span>")
+      number_of_credentials += 1
   else:
     credentials_output = tmp.replace("<APPNAME>", "<span class=\"status offline\">n/a</span>")
   entries += credentials_output
