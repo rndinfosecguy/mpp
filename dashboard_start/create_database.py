@@ -85,7 +85,8 @@ apps = [
     ("Amazon", "amazon"),
     ("Duolingo", "duolingo"),
     ("Firefox", "firefox"),
-    ("Signal", "signal")
+    ("Signal", "signal"),
+    ("ChatGPT", "chatgpt")
 ]
 
 cursor.executemany(
