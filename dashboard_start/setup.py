@@ -120,7 +120,7 @@ def print_a_record_requests(pcap_file):
 
 loot_folder = "/mmc/root/loot/mpp/"
 credentials_file = "/mmc/root/logs/credentials.json"
-credentials_file = "/mmc/root/logs/hostnames.csv"
+hostnames_file = "/mmc/root/logs/hostnames.csv"
    
 print("[*] Checking for database file...")
 if not os.path.exists('data.db'):
