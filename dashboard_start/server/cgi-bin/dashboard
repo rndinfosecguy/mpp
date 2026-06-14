@@ -217,7 +217,7 @@ head = """
   <div class="container">
     <div class="header">
       <h1>MPP Dashboard</h1>
-      <p>Track your engagements.</p>
+      <p><a href="/cgi-bin/dashboard" class="ip-link">Dashboard</a> | <a href="/cgi-bin/search" class="ip-link">DNS Queries</a></p>
       
       <div class="search-container">
         <input

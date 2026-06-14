@@ -1,0 +1,267 @@
+#!/usr/bin/env python3
+import sqlite3
+from urllib.parse import parse_qs
+import os
+from datetime import datetime
+import html
+
+query = os.environ.get("QUERY_STRING", "")
+params = parse_qs(query)
+query = params.get("query", [""])[0]
+
+print("Content-Type: text/html")
+print()
+
+print("<html>")
+print("<body>")
+
+head = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DNS Query Search</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
+    }
+
+    body{
+      font-family:'Inter',sans-serif;
+      background:linear-gradient(135deg,#0f172a,#111827);
+      color:#f8fafc;
+      min-height:100vh;
+      padding:40px 20px;
+    }
+
+    .container{
+      max-width:1200px;
+      margin:0 auto;
+    }
+
+    .header{
+      margin-bottom:40px;
+    }
+
+    .header h1{
+      font-size:2.8rem;
+      margin-bottom:12px;
+      background:linear-gradient(to right,#38bdf8,#818cf8);
+      -webkit-background-clip:text;
+      -webkit-text-fill-color:transparent;
+    }
+
+    .header p{
+      color:#94a3b8;
+      font-size:1rem;
+    }
+
+    .search-box{
+      margin-top:25px;
+    }
+
+    .search-box input{
+      width:100%;
+      padding:16px 20px;
+      border-radius:16px;
+      border:1px solid rgba(148,163,184,0.15);
+      background:rgba(15,23,42,0.8);
+      color:#fff;
+      font-size:1rem;
+      outline:none;
+      transition:0.2s ease;
+    }
+
+    .search-box input:focus{
+      border-color:#38bdf8;
+      box-shadow:0 0 0 4px rgba(56,189,248,0.1);
+    }
+
+    .card{
+      background:rgba(15,23,42,0.8);
+      border:1px solid rgba(148,163,184,0.12);
+      border-radius:24px;
+      padding:24px;
+      margin-bottom:24px;
+      backdrop-filter:blur(10px);
+      box-shadow:0 10px 30px rgba(0,0,0,0.35);
+    }
+
+    .card-title{
+      font-size:1.3rem;
+      margin-bottom:20px;
+      color:#38bdf8;
+      font-weight:600;
+    }
+
+    .device-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+      gap:18px;
+    }
+
+    .info-box{
+      background:rgba(30,41,59,0.65);
+      border-radius:18px;
+      padding:18px;
+      border:1px solid rgba(148,163,184,0.08);
+    }
+
+    .label{
+      font-size:0.8rem;
+      text-transform:uppercase;
+      color:#94a3b8;
+      margin-bottom:8px;
+    }
+
+    .value{
+      font-size:1.05rem;
+      font-weight:600;
+      word-break:break-word;
+    }
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+    }
+
+    th{
+      text-align:left;
+      color:#94a3b8;
+      padding:16px;
+      border-bottom:1px solid rgba(148,163,184,0.1);
+    }
+
+    td{
+      padding:16px;
+      border-bottom:1px solid rgba(148,163,184,0.06);
+    }
+
+    tr:hover{
+      background:rgba(30,41,59,0.45);
+    }
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      padding:6px 12px;
+      border-radius:999px;
+      background:rgba(34,197,94,0.15);
+      color:#4ade80;
+      font-size:0.85rem;
+      font-weight:600;
+    }
+
+    @media(max-width:768px){
+
+      .header h1{
+        font-size:2rem;
+      }
+
+      table{
+        display:block;
+        overflow-x:auto;
+      }
+    }
+  </style>
+</head>
+"""
+
+body="""
+<body>
+
+<div class="container">
+
+  <div class="header">
+    <h1>Search Queries</h1>
+    <p>Search for DNS queries clients made.</p>
+
+    <div class="search-box">
+      <input
+        type="text"
+        id="searchInput"
+        placeholder="search string"
+        onkeyup="handleKey(event)"
+        <DELETE_OR_NOT>
+      />
+    </div>
+  </div>
+
+  <!-- DNS REQUESTS -->
+  <div class="card searchable">
+    <div class="card-title">DNS Requests</div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>IP</th>
+          <th>Query</th>
+        </tr>
+      </thead>
+
+      <tbody>
+      <CONTENT>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  function handleKey(event) {
+    if (event.key === "Enter") {
+      submitSearch();
+    }
+  }
+
+  function submitSearch() {
+    const value = document.getElementById("searchInput").value;
+    //console.log("Submitting:", value);
+    
+    const params = new URLSearchParams({
+      query: value
+    });
+
+    window.location.href = window.location.pathname + "?" + params.toString();
+  }
+</script>
+"""
+
+content = """
+        <tr>
+          <td><TIME></td>
+          <td><IP></td>
+          <td><QUERY></td>
+        </tr>
+"""
+
+all_content = ""
+if query != "":
+  conn = sqlite3.connect('../data.db')
+  c = conn.cursor()
+  search = "%" + query + "%"
+  c.execute("SELECT ip, query FROM dns_queries WHERE query like ?", (search,))
+  row = c.fetchall()
+  for line in row:
+    c.execute("SELECT ip, date FROM targets where id=?", (line[0],))
+    target = c.fetchone()
+    tmp = content.replace("<TIME>", datetime.fromtimestamp(int(float(target[1]))).strftime('%Y-%m-%d %H:%M:%S'))
+    tmp = tmp.replace("<IP>", target[0])
+    tmp = tmp.replace("<QUERY>", line[1])
+    all_content += tmp
+
+print(head)
+body = body.replace("<CONTENT>", all_content)
+if query != "":
+  print(body.replace("<DELETE_OR_NOT>", "value=" + html.escape(query)))
+else:
+  pass
+  print(body.replace("<DELETE_OR_NOT>", ""))
+print("</body>")
+print("</html>")
