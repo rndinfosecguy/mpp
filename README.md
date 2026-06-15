@@ -1,10 +1,9 @@
-# mpp
+# My Pineapple Pager Payloads (MPP)
 
 <p align="center">
     <img src="readme_assets/logo.png" width="300"/> 
 </p>
 
-My Pineapple Pager Payloads.
 The core of the repository is a dashboard which analyzes DNS traffic intercepted on `wlan0open` on the Wifi Pineapple Pager to fingerpint devices.
 
 ## Features
@@ -39,6 +38,8 @@ opkg install -d mmc scapy
 Dashboard is a module which analyzes and visualizes data collected by `Evil Portal` (`credentials.json`) and the collected `dns` dumps from the moulde `start_dns_tcpdump`.
 
 The idea is to have a simple overview over devices which are or were connected to `Evil Portal` or the open AP. Also the modules tries to identify what apps might be installed on the device based `dns` queries the device made.
+
+I recommend using the modified portals for `Evil Portal` I forked (https://github.com/rndinfosecguy/evilportals_pager) as there the collected credentials are aggregated at one spot (`/mmc/root/logs/credentials.json`) and I also added a snippet which collects all hostnames of clients who visit the captive portal (`/mmc/root/logs/hostnames.csv`). Other versions of `Evil Portal` portals are not compatible with this repo and may lead to less data to be analyzed (no creds and hostnames).
 
 ### dashboard_start
 
