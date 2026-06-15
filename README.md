@@ -1,7 +1,7 @@
 # My Pineapple Pager Payloads (MPP)
 
 <p align="center">
-    <img src="readme_assets/logo.png" width="300"/> 
+    <img src="readme_assets/logo.png" width="350"/> 
 </p>
 
 The core of the repository is a dashboard which analyzes DNS traffic intercepted on `wlan0open` on the Wifi Pineapple Pager to fingerpint devices.
