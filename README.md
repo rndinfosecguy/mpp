@@ -37,7 +37,7 @@ opkg install -d mmc scapy
 
 Dashboard is a module which analyzes and visualizes data collected by `Evil Portal` (`credentials.json`) and the collected `dns` dumps from the moulde `start_dns_tcpdump`.
 
-The idea is to have a simple overview over devices which are or were connected to `Evil Portal`/open AP. Also the modules tries to identify what apps might be installed on the device based on `dns` queries the device made.
+The idea is to have a simple overview over devices which are or were connected to `Evil Portal`/`open AP`. Also the module tries to identify what apps might be installed on the device based on `dns` queries the device made.
 
 I recommend using the modified portals for `Evil Portal` I forked (https://github.com/rndinfosecguy/evilportals_pager) as there collected credentials are aggregated at one spot (`/mmc/root/logs/credentials.json`) and all hostnames of clients who visit the captive portal are stored regardless if the person enters credentials or not (`/mmc/root/logs/hostnames.csv`). Other versions of `Evil Portal` portals are not compatible with MPP and may lead to less data to be analyzed (no creds and hostnames).
 
@@ -45,13 +45,12 @@ I recommend using the modified portals for `Evil Portal` I forked (https://githu
 
 This module performs multiple steps:
 
-- check if the database file for this module exists
 - go through every pcap file in `/root/loot/mpp/` and check for `dns` queries which indiciate a specific app might be installed on the connected mobile device
-- go through the credentials entries of `Evil Portal` (`redentials.json`)
+- go through the credentials entries of `Evil Portal` (`credentials.json`)
 - go through collected hostnames (`hostnames.csv`)
 - starting a web server which visualizes the collected data (`http://172.16.52.1:8000/cgi-bin/dashboard`)
 
-The module remembers which `pcap` files it already processed. So, as the start of the module on the Pineapple Pager takes a while it is not additionally slowed down by processing known data again.
+The hardware of the Pineapple Pager does not have a good performance. Therefore the module remembers which `pcap` files it already processed when executing `dashboard_start`. This way the exeuction of the module is not additionally slowed down by processing known data again.
 
 ### dashboard_stop
 
@@ -59,7 +58,7 @@ Kills the python web server.
 
 ### UI Preview
 
-<img src="readme_assets/dashboard_default.png" width="200"/> <img src="readme_assets/dashboard_creds.png" width="200"/> <img src="readme_assets/dashboard_apps.png" width="200"/>
+<img src="readme_assets/dashboard_default.png" width="200"/> 
 
 ## License
 

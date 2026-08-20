@@ -5,393 +5,352 @@ from datetime import datetime
 print("Content-Type: text/html")
 print()
 
-print("<html>")
-print("<body>")
+conn = sqlite3.connect("../data.db")
+c = conn.cursor()
 
-head = """
-<!DOCTYPE html>
+# Query 1: All targets
+c.execute("SELECT id, ip, mac, pcap, date FROM targets")
+targets = c.fetchall()
+
+# Query 2: All app name mappings
+c.execute("SELECT id, app FROM apps")
+app_name_map = {row[0]: row[1] for row in c.fetchall()}
+
+# Query 3: All targetapps joined with app names
+c.execute("""
+    SELECT targetapps.target, apps.app
+    FROM targetapps
+    JOIN apps ON targetapps.appname = apps.id
+""")
+target_apps = {}
+target_app_counts = {}
+for target_id, app_name in c.fetchall():
+    if target_id not in target_apps:
+        target_apps[target_id] = []
+        target_app_counts[target_id] = {}
+    if app_name not in target_apps[target_id]:
+        target_apps[target_id].append(app_name)
+    target_app_counts[target_id][app_name] = target_app_counts[target_id].get(app_name, 0) + 1
+
+# Query 4: All credentials
+c.execute("SELECT target, username, password, hostname FROM credentials")
+creds = {}
+for target_id, username, password, hostname in c.fetchall():
+    creds[target_id] = (username, password, hostname)
+
+# Query 5: All DNS counts
+c.execute("SELECT ip, COUNT(*) FROM dns_queries GROUP BY ip")
+dns_counts = dict(c.fetchall())
+
+c.execute("SELECT COUNT(*) FROM dns_queries")
+total_dns = c.fetchone()[0]
+
+conn.close()
+
+total_creds = 0
+total_apps = 0
+target_data = []
+
+for tid, ip, mac, pcap, date in targets:
+    cred = creds.get(tid)
+    if cred:
+        username, _password, hostname = cred
+        has_creds = True
+    else:
+        username = None
+        hostname = "n/a"
+        has_creds = False
+
+    if has_creds and username and username != "NONE":
+        total_creds += 1
+
+    apps = target_apps.get(tid, [])
+    total_apps += len(apps)
+
+    app_counts = target_app_counts.get(tid, {})
+    ios_score = app_counts.get("iOS", 0)
+    android_score = app_counts.get("Android", 0)
+    if ios_score > android_score:
+        os_type = "iOS"
+    elif android_score > ios_score:
+        os_type = "Android"
+    elif ios_score > 0 and android_score > 0:
+        os_type = "Mixed"
+    else:
+        os_type = None
+
+    dns_count = dns_counts.get(tid, 0)
+
+    pcap_name = pcap.split("/")[-1] if pcap != "n/a" else "n/a"
+    readable_date = datetime.fromtimestamp(int(float(date))).strftime("%Y-%m-%d")
+    target_data.append({
+        "ip": ip, "mac": mac, "hostname": hostname, "date": readable_date,
+        "pcap": pcap_name, "has_creds": has_creds, "username": username,
+        "apps": apps, "os": os_type, "dns_count": dns_count,
+    })
+
+app_colors = {
+    "Instagram": "#E1306C", "Facebook": "#1877F2", "WhatsApp": "#25D366",
+    "TikTok": "#000000", "WeChat": "#07C160", "Twitter": "#1DA1F2",
+    "Telegram": "#26A5E4", "Spotify": "#1DB954",
+    "Huawei": "#CF0A2C", "Tencent": "#25D366", "Samsung": "#1428A0",
+    "Android": "#3DDC84", "iOS": "#007AFF", "Amazon": "#FF9900", "Google": "#4285F4",
+    "YouTube": "#FF0000", "Xiaomi": "#FF6700", "Baidu": "#2932E1",
+    "Snapchat": "#FFFC00", "Soundcloud": "#FF5500",
+    "Duolingo": "#58CC02", "Firefox": "#FF7139", "Signal": "#3A76F0",
+    "ChatGPT": "#10A37F", "Claude": "#D97757", "Rewe": "#E2001A",
+}
+
+n = len(target_data)
+
+html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MPP Dashboard</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MPP Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{
+  font-family:'Inter',sans-serif;
+  background:#0b0e1a;
+  color:#f8fafc;
+  min-height:100vh;
+  overflow-x:hidden;
+}}
+body::before{{
+  content:'';position:fixed;top:-200px;left:-200px;
+  width:600px;height:600px;
+  background:radial-gradient(circle,rgba(59,130,246,0.15),transparent 70%);
+  pointer-events:none;z-index:0;
+}}
+body::after{{
+  content:'';position:fixed;bottom:-150px;right:-150px;
+  width:500px;height:500px;
+  background:radial-gradient(circle,rgba(139,92,246,0.12),transparent 70%);
+  pointer-events:none;z-index:0;
+}}
+.page{{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:24px 20px 60px}}
 
-    body {
-      font-family: 'Inter', sans-serif;
-      background: linear-gradient(135deg, #0f172a, #111827);
-      color: #f8fafc;
-      min-height: 100vh;
-      padding: 40px 20px;
-    }
+nav{{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 0;margin-bottom:32px;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+}}
+.nav-brand{{
+  font-size:1.6rem;font-weight:800;letter-spacing:-0.5px;
+  background:linear-gradient(135deg,#3b82f6,#8b5cf6);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}}
+.nav-links{{display:flex;gap:24px}}
+.nav-links a{{
+  color:#94a3b8;text-decoration:none;font-size:0.9rem;font-weight:500;
+  transition:color 0.2s;
+}}
+.nav-links a:hover,.nav-links a.active{{color:#f8fafc}}
 
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-    }
+.summary{{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:16px;
+  margin-bottom:36px;
+}}
+.stat{{
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.06);
+  border-radius:16px;padding:20px 24px;
+  backdrop-filter:blur(16px);
+  border-left:3px solid var(--accent);
+  transition:transform 0.2s,box-shadow 0.2s;
+}}
+.stat:hover{{transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,0.3)}}
+.stat-label{{font-size:0.75rem;text-transform:uppercase;letter-spacing:1px;color:#64748b;margin-bottom:6px}}
+.stat-value{{font-size:1.8rem;font-weight:700}}
+.stat-value.blue{{color:#3b82f6}}
+.stat-value.green{{color:#10b981}}
+.stat-value.purple{{color:#8b5cf6}}
+.stat-value.amber{{color:#f59e0b}}
 
-    .header {
-      margin-bottom: 40px;
-      text-align: center;
-    }
+.search-wrap{{margin-bottom:28px}}
+.search-wrap input{{
+  width:100%;max-width:480px;padding:14px 20px;
+  border-radius:14px;border:1px solid rgba(255,255,255,0.08);
+  background:rgba(255,255,255,0.04);color:#f8fafc;
+  font-size:0.95rem;outline:none;
+  backdrop-filter:blur(12px);
+  transition:border-color 0.2s,box-shadow 0.2s;
+}}
+.search-wrap input:focus{{
+  border-color:#3b82f6;
+  box-shadow:0 0 0 3px rgba(59,130,246,0.15),0 0 20px rgba(59,130,246,0.1);
+}}
+.search-wrap input::placeholder{{color:#475569}}
 
-    .header h1 {
-      font-size: 3rem;
-      font-weight: 700;
-      margin-bottom: 12px;
-      background: linear-gradient(to right, #38bdf8, #818cf8);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
+.devices{{display:flex;flex-direction:column;gap:16px}}
 
-    .header p {
-      color: #94a3b8;
-      font-size: 1.1rem;
-    }
+.device-card{{
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(255,255,255,0.06);
+  border-radius:16px;padding:24px;
+  backdrop-filter:blur(16px);
+  border-left:3px solid var(--accent,#3b82f6);
+  transition:transform 0.2s,box-shadow 0.2s,border-color 0.2s;
+}}
+.device-card:hover{{
+  transform:translateY(-2px);
+  box-shadow:0 12px 40px rgba(0,0,0,0.4);
+  border-left-color:var(--accent-hover,#60a5fa);
+}}
+.device-top{{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}}
+.device-ip{{
+  font-size:1.3rem;font-weight:700;
+  color:#3b82f6;text-decoration:none;
+  font-family:'Courier New',monospace;
+  transition:color 0.2s;
+}}
+.device-ip:hover{{color:#60a5fa}}
+.device-meta{{font-size:0.8rem;color:#64748b;margin-top:4px;font-family:'Courier New',monospace}}
+.device-meta span{{margin-right:12px}}
 
-    .table-wrapper {
-      background: rgba(15, 23, 42, 0.8);
-      border: 1px solid rgba(148, 163, 184, 0.15);
-      border-radius: 24px;
-      overflow: hidden;
-      backdrop-filter: blur(10px);
-      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
-    }
+.cred-badge{{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:6px 14px;border-radius:999px;
+  font-size:0.8rem;font-weight:600;
+  white-space:nowrap;
+}}
+.cred-badge.yes{{background:rgba(16,185,129,0.15);color:#10b981}}
+.cred-badge.no{{background:rgba(100,116,139,0.15);color:#64748b}}
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
+.device-bottom{{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}}
+.app-tags{{display:flex;flex-wrap:wrap;gap:6px}}
+.app-tag{{
+  padding:4px 10px;border-radius:8px;
+  font-size:0.75rem;font-weight:600;
+  color:#fff;
+  opacity:0.9;
+}}
 
-    thead {
-      background: rgba(30, 41, 59, 0.9);
-    }
+.empty{{
+  text-align:center;padding:80px 20px;
+  color:#475569;font-size:1.1rem;
+}}
+.empty-icon{{font-size:3rem;margin-bottom:12px;opacity:0.4}}
 
-    thead th {
-      text-align: left;
-      padding: 22px 28px;
-      font-size: 0.95rem;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: #cbd5e1;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-    }
-
-    tbody tr.ip-row {
-      background: rgba(15, 23, 42, 0.55);
-      transition: all 0.25s ease;
-    }
-
-    tbody tr.ip-row:hover {
-      background: rgba(30, 41, 59, 0.8);
-    }
-
-    tbody tr.stats-row {
-      background: rgba(2, 6, 23, 0.6);
-    }
-
-    td {
-      padding: 20px 28px;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.08);
-      vertical-align: top;
-    }
-
-    .ip-link {
-      display: inline-block;
-      color: #38bdf8;
-      font-size: 1.1rem;
-      font-weight: 600;
-      text-decoration: none;
-      transition: color 0.2s ease;
-      word-break: break-all;
-    }
-
-    .ip-link:hover {
-      color: #7dd3fc;
-    }
-
-    .ip-meta {
-      margin-top: 8px;
-      color: #94a3b8;
-      font-size: 0.9rem;
-    }
-
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 16px;
-    }
-
-    .stat-card {
-      background: rgba(30, 41, 59, 0.7);
-      border: 1px solid rgba(148, 163, 184, 0.08);
-      border-radius: 16px;
-      padding: 16px;
-    }
-
-    .stat-label {
-      color: #94a3b8;
-      font-size: 0.8rem;
-      text-transform: uppercase;
-      margin-bottom: 6px;
-      letter-spacing: 0.5px;
-    }
-
-    .stat-value {
-      font-size: 1.1rem;
-      font-weight: 600;
-      color: #f8fafc;
-    }
-
-    .status {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
-      border-radius: 999px;
-      font-size: 0.85rem;
-      font-weight: 600;
-    }
-
-    .online {
-      background: rgba(34, 197, 94, 0.15);
-      color: #4ade80;
-    }
-
-    .offline {
-      background: rgba(239, 68, 68, 0.15);
-      color: #f87171;
-    }
-
-    .search-container {
-      margin-top: 24px;
-      display: flex;
-      justify-content: center;
-    }
-
-    #searchInput {
-      width: 100%;
-      max-width: 500px;
-      padding: 16px 20px;
-      border-radius: 16px;
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      background: rgba(15, 23, 42, 0.85);
-      color: #f8fafc;
-      font-size: 1rem;
-      outline: none;
-      transition: all 0.25s ease;
-      backdrop-filter: blur(8px);
-      box-shadow: 0 4px 20px rgba(0,0,0,0.25);
-    }
-
-    #searchInput:focus {
-      border-color: #38bdf8;
-      box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.15);
-    }
-
-    #searchInput::placeholder {
-      color: #94a3b8;
-    }
-
-    @media (max-width: 768px) {
-      .header h1 {
-        font-size: 2rem;
-      }
-
-      td, thead th {
-        padding: 18px;
-      }
-
-      .stats-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-  </style>
+@media(max-width:768px){{
+  .summary{{grid-template-columns:repeat(2,1fr)}}
+  .device-top{{flex-direction:column}}
+  .stat-value{{font-size:1.4rem}}
+}}
+</style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <h1>MPP Dashboard</h1>
-      <p><a href="/cgi-bin/dashboard" class="ip-link">Dashboard</a> | <a href="/cgi-bin/search" class="ip-link">DNS Queries</a></p>
-      
-      <div class="search-container">
-        <input
-          type="text"
-          id="searchInput"
-          placeholder="Search..."
-          onkeyup="filterIPs()"
-        />
-      </div>
+<div class="page">
+  <nav>
+    <div class="nav-brand">🍍 MPP</div>
+    <div class="nav-links">
+      <a href="/cgi-bin/dashboard" class="active">Dashboard</a>
+      <a href="/cgi-bin/search">DNS Queries</a>
     </div>
+  </nav>
 
-    <div class="table-wrapper">
-      <table>
-        <thead>
-          <tr>
-            <th><NUMBEROFIPS> ip addresses, <NUMBEROFCREDS> credentials</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-"""
-
-ip_block = """
-          <!-- IP Block -->
-          <tr class="ip-row">
-            <td>
-              <a href="details?ip=<IP_ADDRESS>" class="ip-link" target="_blank">
-                <IP_ADDRESS>
-              </a>
-              <div class="ip-meta"><PCAPFILE></div>
-            </td>
-            <td>
-              <span class="status online"><DATE></span>
-            </td>
-          </tr>
-"""
-
-stat = """
-                <div class="stat-card">
-                  <div class="stat-label"><APP></div>
-                  <div class="stat-value"><APPNAME></div>
-                </div>
-"""
-
-stat_grid_start = """
-          <tr class="stats-row">
-            <td colspan="2">
-              <div class="stats-grid">
-"""
-
-stat_grid_end = """
-              </div>
-            </td>
-          </tr>
-"""
-
-footer = """
-        </tbody>
-      </table>
+  <div class="summary">
+    <div class="stat" style="--accent:#3b82f6">
+      <div class="stat-label">Devices</div>
+      <div class="stat-value blue" id="statDevices">{n}</div>
+    </div>
+    <div class="stat" style="--accent:#10b981">
+      <div class="stat-label">Credentials</div>
+      <div class="stat-value green" id="statCreds">{total_creds}</div>
+    </div>
+    <div class="stat" style="--accent:#8b5cf6">
+      <div class="stat-label">Apps Detected</div>
+      <div class="stat-value purple" id="statApps">{total_apps}</div>
+    </div>
+    <div class="stat" style="--accent:#f59e0b">
+      <div class="stat-label">DNS Queries</div>
+      <div class="stat-value amber" id="statDns">{total_dns}</div>
     </div>
   </div>
-  <script>
-    function filterIPs() {
-      const input = document.getElementById('searchInput');
-      const filter = input.value.toLowerCase();
-      const tbody = document.querySelector('tbody');
-      const rows = tbody.querySelectorAll('tr');
 
-      for (let i = 0; i < rows.length; i += 2) {
-        const ipRow = rows[i];
-        const statsRow = rows[i + 1];
+  <div class="search-wrap">
+    <input type="text" id="searchInput" placeholder="Search devices, IPs, apps..." onkeyup="filterDevices()" />
+  </div>
 
-        const ipText = ipRow.innerText.toLowerCase();
-        const statsText = statsRow.innerText.toLowerCase();
-        const combinedText = ipText + ' ' + statsText;
+  <div class="devices" id="deviceList">
+"""
 
-        if (combinedText.includes(filter)) {
-          ipRow.style.display = '';
-          statsRow.style.display = '';
-        } else {
-          ipRow.style.display = 'none';
-          statsRow.style.display = 'none';
-        }
-      }
+if n == 0:
+    html += '    <div class="empty"><div class="empty-icon">&#128270;</div>No devices found. Run <code>setup.py</code> to populate the database.</div>\n'
+else:
+    for d in target_data:
+        color = "#3b82f6"
+        cred_html = '<span class="cred-badge no">No creds</span>'
+        if d["has_creds"] and d["username"] and d["username"] != "NONE":
+            cred_html = f'<span class="cred-badge yes">&#10003; {d["username"]}</span>'
+            color = "#10b981"
+
+        os_html = ""
+        if d["os"]:
+            os_color = app_colors.get(d["os"], "#6366f1") if d["os"] != "Mixed" else "#f59e0b"
+            os_html = f'<span class="cred-badge" style="background:{os_color}22;color:{os_color}">{d["os"]}</span>'
+
+        app_tags = ""
+        for app in d["apps"]:
+            if app in ("iOS", "Android"):
+                continue
+            bg = app_colors.get(app, "#6366f1")
+            app_tags += f'<span class="app-tag" style="background:{bg}">{app}</span>'
+
+        searchable_apps = " ".join(a for a in d["apps"] if a not in ("iOS", "Android"))
+        searchable = f'{d["ip"]} {d["mac"]} {d["hostname"]} {d.get("username","")} {searchable_apps} {d["os"] or ""}'.lower()
+
+        html += f"""    <div class="device-card" style="--accent:{color}" data-search="{searchable}" data-dns="{d["dns_count"]}">
+      <div class="device-top">
+        <div>
+          <a href="details?ip={d['ip']}" class="device-ip">{d['ip']}</a>
+          <div class="device-meta">
+            <span>{d['mac']}</span>
+            <span>{d['hostname']}</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">{os_html}{cred_html}</div>
+      </div>
+      <div class="device-bottom">
+        <div class="app-tags">{app_tags}</div>
+        <div class="device-meta">{d['date']} &middot; {d['pcap']}</div>
+      </div>
+    </div>
+"""
+
+html += """  </div>
+</div>
+<script>
+function filterDevices(){
+  var v=document.getElementById('searchInput').value.toLowerCase();
+  var cards=document.querySelectorAll('.device-card');
+  var visCount=0,credCount=0,appSet={},dnsTotal=0;
+  for(var i=0;i<cards.length;i++){
+    var s=cards[i].getAttribute('data-search')||'';
+    var vis=s.indexOf(v)!==-1;
+    cards[i].style.display=vis?'':'none';
+    if(vis){
+      visCount++;
+      var cb=cards[i].querySelector('.cred-badge.yes');
+      if(cb)credCount++;
+      var tags=cards[i].querySelectorAll('.app-tag');
+      for(var j=0;j<tags.length;j++)appSet[tags[j].textContent]=1;
+      var dc=parseInt(cards[i].getAttribute('data-dns'))||0;
+      dnsTotal+=dc;
     }
-  </script>
+  }
+  document.getElementById('statDevices').textContent=visCount;
+  document.getElementById('statCreds').textContent=credCount;
+  document.getElementById('statApps').textContent=Object.keys(appSet).length;
+  document.getElementById('statDns').textContent=dnsTotal;
+}
+</script>
 </body>
 </html>
 """
-# Connect to the SQLite database
-conn = sqlite3.connect('../data.db')
 
-# Create a cursor object
-c = conn.cursor()
-
-# Perform a SELECT statement on the 'targets' table, storing the IP and MAC combination in variables
-c.execute("SELECT id, ip, mac, pcap, date FROM targets")
-rows = c.fetchall()
-ip_mac_combinations = [(row[0], row[1], row[2], row[3], row[4]) for row in rows]
-
-entries = ""
-number_of_credentials = 0
-number_of_entries = 0
-for id, ip, mac, pcap, date in ip_mac_combinations:
-  # print IP block
-  tmp = ip_block.replace("<IP_ADDRESS>", ip)
-
-  if pcap != "n/a":
-    tmp = tmp.replace("<PCAPFILE>", pcap.split("/")[len(pcap.split("/"))-1])
-  else:
-    tmp = tmp.replace("<PCAPFILE>", pcap)
-  
-  # adding date...
-  readable_date = datetime.fromtimestamp(int(float(date))).strftime('%Y-%m-%d %H:%M:%S')
-  ip_output = tmp.replace("<DATE>", readable_date.split(" ")[0])
-  entries += ip_output
-  entries += stat_grid_start
-  
-  # credentials
-  tmp = stat.replace("<APP>", "Credentials")
-  c.execute("SELECT count(id) FROM credentials WHERE target=" + str(id))
-  row = c.fetchone()
-  hostname = "n/a"
-  if (int(row[0]) > 0):
-    c.execute("SELECT username, password, hostname FROM credentials WHERE target=" + str(id))
-    pwRow = c.fetchone()
-    hostname = pwRow[2]
-    if pwRow[0] != "NONE":
-      credentials_output = tmp.replace("<APPNAME>", "<span class=\"status online\">user: " + pwRow[0] + "<br />pass : " + pwRow[1] + "</span>")
-      number_of_credentials += 1
-    else:
-      credentials_output = tmp.replace("<APPNAME>", "<span class=\"status offline\">n/a</span>")
-  else:
-    credentials_output = tmp.replace("<APPNAME>", "<span class=\"status offline\">n/a</span>")
-  entries += credentials_output
-  
-  # mac
-  tmp = stat.replace("<APP>", "MAC")
-  mac_output = tmp.replace("<APPNAME>", mac)
-  entries += mac_output
-  
-  # hostname
-  tmp = stat.replace("<APP>", "HOSTNAME")
-  hostname_output = tmp.replace("<APPNAME>", hostname)
-  entries += hostname_output
-  
-  # print apps
-  c.execute("SELECT appname from targetapps WHERE target=" + str(id))
-  rows = c.fetchall()
-  app_combination = [(row[0]) for row in rows]
-  
-  different_apps = set()
-  apps_output = ""
-  for appname in app_combination:
-    c.execute("SELECT app from apps WHERE id=" + str(appname))
-    rows = c.fetchall()
-    app_names = [(row[0]) for row in rows]
-    for app in app_names:
-      if app not in different_apps:
-        tmp = stat.replace("<APP>", "Device/App")
-        tmp = tmp.replace("<APPNAME>", app)
-        different_apps.add(app)
-        apps_output += tmp
-  entries += apps_output
-  entries += stat_grid_end
-  number_of_entries += 1
-
-head = head.replace("<NUMBEROFIPS>", str(number_of_entries))
-head = head.replace("<NUMBEROFCREDS>", str(number_of_credentials))
-print(head)
-print(entries)
-print(footer)
-print("</body>")
-print("</html>")
-
-# Close the connection to the database
-conn.close()
+print(html)

@@ -3,265 +3,236 @@ import sqlite3
 from urllib.parse import parse_qs
 import os
 from datetime import datetime
-import html
+import html as html_mod
 
-query = os.environ.get("QUERY_STRING", "")
-params = parse_qs(query)
-query = params.get("query", [""])[0]
+query_string = os.environ.get("QUERY_STRING", "")
+params = parse_qs(query_string)
+search_query = params.get("query", [""])[0]
 
 print("Content-Type: text/html")
 print()
 
-print("<html>")
-print("<body>")
+conn = sqlite3.connect("../data.db")
+c = conn.cursor()
 
-head = """
-<!DOCTYPE html>
+results = []
+if search_query:
+    pattern = "%" + search_query + "%"
+    c.execute("SELECT ip, query FROM dns_queries WHERE query LIKE ?", (pattern,))
+    for ip_id, domain in c.fetchall():
+        c.execute("SELECT ip, date FROM targets WHERE id=?", (ip_id,))
+        target = c.fetchone()
+        if target:
+            ts = datetime.fromtimestamp(int(float(target[1]))).strftime("%Y-%m-%d %H:%M:%S")
+            results.append((ts, target[0], domain))
+
+conn.close()
+
+result_rows = ""
+for ts, ip, domain in results:
+    safe_domain = html_mod.escape(domain)
+    safe_ip = html_mod.escape(ip)
+    result_rows += f"""<tr>
+  <td class="ts-cell">{ts}</td>
+  <td class="ip-cell">{safe_ip}</td>
+  <td class="domain-cell">{safe_domain}</td>
+</tr>\n"""
+
+result_count = len(results)
+if search_query:
+    count_html = f'<span class="count-badge">{result_count} result{"s" if result_count != 1 else ""} for &ldquo;{html_mod.escape(search_query)}&rdquo;</span>'
+else:
+    count_html = '<span class="count-hint">Type a domain or keyword to search DNS queries</span>'
+
+html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>DNS Query Search</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DNS Query Search &mdash; MPP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{
+  font-family:'Inter',sans-serif;
+  background:#0b0e1a;color:#f8fafc;
+  min-height:100vh;overflow-x:hidden;
+}}
+body::before{{
+  content:'';position:fixed;top:-250px;left:50%;transform:translateX(-50%);
+  width:800px;height:800px;
+  background:radial-gradient(circle,rgba(59,130,246,0.1),transparent 60%);
+  pointer-events:none;z-index:0;
+}}
+body::after{{
+  content:'';position:fixed;bottom:-200px;right:-100px;
+  width:500px;height:500px;
+  background:radial-gradient(circle,rgba(16,185,129,0.08),transparent 70%);
+  pointer-events:none;z-index:0;
+}}
+.page{{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:24px 20px 60px}}
 
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+nav{{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 0;margin-bottom:36px;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+}}
+.nav-brand{{
+  font-size:1.6rem;font-weight:800;
+  background:linear-gradient(135deg,#3b82f6,#8b5cf6);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}}
+.nav-links{{display:flex;gap:24px}}
+.nav-links a{{color:#94a3b8;text-decoration:none;font-size:0.9rem;font-weight:500;transition:color 0.2s}}
+.nav-links a:hover,.nav-links a.active{{color:#f8fafc}}
 
-  <style>
-    *{
-      margin:0;
-      padding:0;
-      box-sizing:border-box;
-    }
+.back{{
+  display:inline-flex;align-items:center;gap:6px;
+  color:#94a3b8;text-decoration:none;font-size:0.9rem;font-weight:500;
+  margin-bottom:24px;transition:color 0.2s;
+}}
+.back:hover{{color:#3b82f6}}
 
-    body{
-      font-family:'Inter',sans-serif;
-      background:linear-gradient(135deg,#0f172a,#111827);
-      color:#f8fafc;
-      min-height:100vh;
-      padding:40px 20px;
-    }
+.page-title{{
+  font-size:2.2rem;font-weight:800;margin-bottom:8px;
+  background:linear-gradient(135deg,#3b82f6,#10b981);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}}
+.page-sub{{color:#64748b;font-size:0.95rem;margin-bottom:28px}}
 
-    .container{
-      max-width:1200px;
-      margin:0 auto;
-    }
+.search-box{{
+  margin-bottom:24px;
+}}
+.search-box input{{
+  width:100%;padding:16px 22px;
+  border-radius:16px;border:2px solid rgba(255,255,255,0.08);
+  background:rgba(255,255,255,0.04);color:#f8fafc;
+  font-size:1.05rem;outline:none;
+  backdrop-filter:blur(16px);
+  transition:border-color 0.2s,box-shadow 0.3s;
+}}
+.search-box input:focus{{
+  border-color:#3b82f6;
+  box-shadow:0 0 0 4px rgba(59,130,246,0.12),0 0 30px rgba(59,130,246,0.08);
+}}
+.search-box input::placeholder{{color:#475569}}
 
-    .header{
-      margin-bottom:40px;
-    }
+.count-badge{{
+  display:inline-block;padding:8px 16px;
+  border-radius:10px;
+  background:rgba(59,130,246,0.12);color:#60a5fa;
+  font-size:0.85rem;font-weight:600;margin-bottom:20px;
+}}
+.count-hint{{
+  display:inline-block;padding:8px 16px;
+  border-radius:10px;
+  background:rgba(255,255,255,0.03);color:#475569;
+  font-size:0.85rem;font-weight:500;margin-bottom:20px;
+}}
 
-    .header h1{
-      font-size:2.8rem;
-      margin-bottom:12px;
-      background:linear-gradient(to right,#38bdf8,#818cf8);
-      -webkit-background-clip:text;
-      -webkit-text-fill-color:transparent;
-    }
+.results{{
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(255,255,255,0.06);
+  border-radius:16px;
+  backdrop-filter:blur(16px);
+  overflow:hidden;
+}}
+.results table{{width:100%;border-collapse:collapse}}
+.results thead th{{
+  text-align:left;padding:16px 20px;
+  font-size:0.75rem;text-transform:uppercase;letter-spacing:1px;
+  color:#64748b;
+  background:rgba(255,255,255,0.02);
+  border-bottom:1px solid rgba(255,255,255,0.06);
+}}
+.results tbody tr{{
+  border-bottom:1px solid rgba(255,255,255,0.03);
+  transition:background 0.15s;
+}}
+.results tbody tr:hover{{background:rgba(255,255,255,0.03)}}
+.results tbody tr:last-child{{border-bottom:none}}
 
-    .header p{
-      color:#94a3b8;
-      font-size:1rem;
-    }
+.ts-cell{{
+  padding:14px 20px;font-size:0.85rem;color:#94a3b8;
+  white-space:nowrap;
+}}
+.ip-cell{{
+  padding:14px 20px;font-family:'Courier New',monospace;
+  font-size:0.9rem;color:#3b82f6;font-weight:600;
+}}
+.domain-cell{{
+  padding:14px 20px;font-family:'Courier New',monospace;
+  font-size:0.85rem;color:#cbd5e1;
+  word-break:break-all;
+}}
 
-    .search-box{
-      margin-top:25px;
-    }
+.empty{{
+  text-align:center;padding:60px 20px;
+  color:#475569;font-size:1rem;
+}}
+.empty-icon{{font-size:2.5rem;margin-bottom:12px;opacity:0.3}}
 
-    .search-box input{
-      width:100%;
-      padding:16px 20px;
-      border-radius:16px;
-      border:1px solid rgba(148,163,184,0.15);
-      background:rgba(15,23,42,0.8);
-      color:#fff;
-      font-size:1rem;
-      outline:none;
-      transition:0.2s ease;
-    }
-
-    .search-box input:focus{
-      border-color:#38bdf8;
-      box-shadow:0 0 0 4px rgba(56,189,248,0.1);
-    }
-
-    .card{
-      background:rgba(15,23,42,0.8);
-      border:1px solid rgba(148,163,184,0.12);
-      border-radius:24px;
-      padding:24px;
-      margin-bottom:24px;
-      backdrop-filter:blur(10px);
-      box-shadow:0 10px 30px rgba(0,0,0,0.35);
-    }
-
-    .card-title{
-      font-size:1.3rem;
-      margin-bottom:20px;
-      color:#38bdf8;
-      font-weight:600;
-    }
-
-    .device-grid{
-      display:grid;
-      grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
-      gap:18px;
-    }
-
-    .info-box{
-      background:rgba(30,41,59,0.65);
-      border-radius:18px;
-      padding:18px;
-      border:1px solid rgba(148,163,184,0.08);
-    }
-
-    .label{
-      font-size:0.8rem;
-      text-transform:uppercase;
-      color:#94a3b8;
-      margin-bottom:8px;
-    }
-
-    .value{
-      font-size:1.05rem;
-      font-weight:600;
-      word-break:break-word;
-    }
-
-    table{
-      width:100%;
-      border-collapse:collapse;
-    }
-
-    th{
-      text-align:left;
-      color:#94a3b8;
-      padding:16px;
-      border-bottom:1px solid rgba(148,163,184,0.1);
-    }
-
-    td{
-      padding:16px;
-      border-bottom:1px solid rgba(148,163,184,0.06);
-    }
-
-    tr:hover{
-      background:rgba(30,41,59,0.45);
-    }
-
-    .badge{
-      display:inline-flex;
-      align-items:center;
-      padding:6px 12px;
-      border-radius:999px;
-      background:rgba(34,197,94,0.15);
-      color:#4ade80;
-      font-size:0.85rem;
-      font-weight:600;
-    }
-
-    @media(max-width:768px){
-
-      .header h1{
-        font-size:2rem;
-      }
-
-      table{
-        display:block;
-        overflow-x:auto;
-      }
-    }
-  </style>
+@media(max-width:768px){{
+  .page-title{{font-size:1.6rem}}
+  .results{{overflow-x:auto}}
+}}
+</style>
 </head>
-"""
-
-body="""
 <body>
-
-<div class="container">
-
-  <div class="header">
-    <h1>Search Queries</h1>
-    <p>Search for DNS queries clients made.</p>
-
-    <div class="search-box">
-      <input
-        type="text"
-        id="searchInput"
-        placeholder="search string"
-        onkeyup="handleKey(event)"
-        <DELETE_OR_NOT>
-      />
+<div class="page">
+  <nav>
+    <div class="nav-brand">🍍 MPP</div>
+    <div class="nav-links">
+      <a href="/cgi-bin/dashboard">Dashboard</a>
+      <a href="/cgi-bin/search" class="active">DNS Queries</a>
     </div>
+  </nav>
+
+  <a href="/cgi-bin/dashboard" class="back">&larr; Back to Dashboard</a>
+
+  <div class="page-title">DNS Query Search</div>
+  <div class="page-sub">Search through all captured DNS queries across devices</div>
+
+  <div class="search-box">
+    <input type="text" id="searchInput" placeholder="e.g. google.com, instagram, whatsapp..." value="{html_mod.escape(search_query)}" onkeyup="handleKey(event)" />
   </div>
 
-  <!-- DNS REQUESTS -->
-  <div class="card searchable">
-    <div class="card-title">DNS Requests</div>
+  {count_html}
 
-    <table>
+  <div class="results">
+"""
+
+if result_rows:
+    html += f"""    <table>
       <thead>
         <tr>
           <th>Timestamp</th>
-          <th>IP</th>
-          <th>Query</th>
+          <th>IP Address</th>
+          <th>Domain</th>
         </tr>
       </thead>
-
       <tbody>
-      <CONTENT>
-      </tbody>
+{result_rows}      </tbody>
     </table>
-  </div>
-</div>
-
-<script>
-  function handleKey(event) {
-    if (event.key === "Enter") {
-      submitSearch();
-    }
-  }
-
-  function submitSearch() {
-    const value = document.getElementById("searchInput").value;
-    //console.log("Submitting:", value);
-    
-    const params = new URLSearchParams({
-      query: value
-    });
-
-    window.location.href = window.location.pathname + "?" + params.toString();
-  }
-</script>
 """
-
-content = """
-        <tr>
-          <td><TIME></td>
-          <td><IP></td>
-          <td><QUERY></td>
-        </tr>
-"""
-
-all_content = ""
-if query != "":
-  conn = sqlite3.connect('../data.db')
-  c = conn.cursor()
-  search = "%" + query + "%"
-  c.execute("SELECT ip, query FROM dns_queries WHERE query like ?", (search,))
-  row = c.fetchall()
-  for line in row:
-    c.execute("SELECT ip, date FROM targets where id=?", (line[0],))
-    target = c.fetchone()
-    tmp = content.replace("<TIME>", datetime.fromtimestamp(int(float(target[1]))).strftime('%Y-%m-%d %H:%M:%S'))
-    tmp = tmp.replace("<IP>", target[0])
-    tmp = tmp.replace("<QUERY>", line[1])
-    all_content += tmp
-
-print(head)
-body = body.replace("<CONTENT>", all_content)
-if query != "":
-  print(body.replace("<DELETE_OR_NOT>", "value=" + html.escape(query)))
 else:
-  pass
-  print(body.replace("<DELETE_OR_NOT>", ""))
-print("</body>")
-print("</html>")
+    if search_query:
+        html += '    <div class="empty"><div class="empty-icon">&#128270;</div>No DNS queries match &ldquo;' + html_mod.escape(search_query) + '&rdquo;</div>\n'
+    else:
+        html += '    <div class="empty"><div class="empty-icon">&#128269;</div>Enter a search term above to find DNS queries</div>\n'
+
+html += """  </div>
+</div>
+<script>
+function handleKey(e){if(e.key==='Enter'){submitSearch()}}
+function submitSearch(){
+  var v=document.getElementById('searchInput').value;
+  var p=new URLSearchParams({query:v});
+  window.location.href=window.location.pathname+'?'+p.toString();
+}
+</script>
+</body>
+</html>"""
+
+print(html)

@@ -8,307 +8,303 @@ query = os.environ.get("QUERY_STRING", "")
 params = parse_qs(query)
 ip = params.get("ip", [""])[0]
 
-print("Content-Type: text/html")
-print()
+app_colors = {
+    "Instagram": "#E1306C", "Facebook": "#1877F2", "WhatsApp": "#25D366",
+    "TikTok": "#111", "WeChat": "#07C160", "Twitter": "#1DA1F2",
+    "Telegram": "#26A5E4", "Spotify": "#1DB954",
+    "Huawei": "#CF0A2C", "Tencent": "#25D366", "Samsung": "#1428A0",
+    "Android": "#3DDC84", "iOS": "#007AFF", "Amazon": "#FF9900", "Google": "#4285F4",
+    "YouTube": "#FF0000", "Xiaomi": "#FF6700", "Baidu": "#2932E1",
+    "Snapchat": "#FFFC00", "Soundcloud": "#FF5500",
+    "Duolingo": "#58CC02", "Firefox": "#FF7139", "Signal": "#3A76F0",
+    "ChatGPT": "#10A37F", "Claude": "#D97757", "Rewe": "#E2001A",
+}
 
-print("<html>")
-print("<body>")
+conn = sqlite3.connect("../data.db")
+c = conn.cursor()
 
-head = """
-<!DOCTYPE html>
+c.execute("SELECT mac, pcap, date, id FROM targets WHERE ip=?", (ip,))
+row = c.fetchone()
+
+if row is None:
+    print("Content-Type: text/html")
+    print()
+    print(f"""<!DOCTYPE html><html><head><title>Not Found</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>body{{font-family:'Inter',sans-serif;background:#0b0e1a;color:#f8fafc;display:flex;align-items:center;justify-content:center;min-height:100vh}}a{{color:#3b82f6}}</style>
+</head><body><div style="text-align:center"><h1>Device not found</h1><p style="margin-top:12px"><a href="/cgi-bin/dashboard">&larr; Back to Dashboard</a></p></div></body></html>""")
+    conn.close()
+    exit()
+
+mac, pcap, date, ip_id = row
+readable_date = datetime.fromtimestamp(int(float(date))).strftime("%Y-%m-%d %H:%M:%S")
+pcap_name = pcap.split("/")[-1] if pcap != "n/a" else "n/a"
+
+c.execute("SELECT count(id) FROM credentials WHERE target=?", (ip_id,))
+cred_count = c.fetchone()[0]
+has_creds = cred_count > 0
+username = password = hostname = None
+if has_creds:
+    c.execute("SELECT username, password, hostname FROM credentials WHERE target=?", (ip_id,))
+    username, password, hostname = c.fetchone()
+
+c.execute("SELECT appname FROM targetapps WHERE target=?", (ip_id,))
+app_rows = c.fetchall()
+apps = []
+seen = set()
+for (aid,) in app_rows:
+    c.execute("SELECT app FROM apps WHERE id=?", (aid,))
+    a = c.fetchone()
+    if a and a[0] not in seen:
+        apps.append(a[0])
+        seen.add(a[0])
+
+os_type = "n/a"
+c.execute("""
+    SELECT apps.app, count(*)
+    FROM targetapps
+    JOIN apps ON targetapps.appname = apps.id
+    WHERE targetapps.target = ?
+    GROUP BY apps.app
+""", (ip_id,))
+app_counts = {row[0]: row[1] for row in c.fetchall()}
+ios_score = app_counts.get("iOS", 0)
+android_score = app_counts.get("Android", 0)
+if ios_score > android_score:
+    os_type = "iOS"
+elif android_score > ios_score:
+    os_type = "Android"
+elif ios_score > 0 and android_score > 0:
+    os_type = "Mixed"
+
+c.execute("SELECT DISTINCT query FROM dns_queries WHERE ip=?", (ip_id,))
+dns_queries = [r[0] for r in c.fetchall()]
+
+conn.close()
+
+cred_card = ""
+if has_creds and username and username != "NONE":
+    cred_card = f"""<div class="info-card cred-card">
+      <div class="info-label">Credentials</div>
+      <div class="info-value cred-value">
+        <span class="cred-user">{username}</span>
+        <span class="cred-sep">/</span>
+        <span class="cred-pass">{password}</span>
+      </div>
+    </div>"""
+else:
+    cred_card = """<div class="info-card">
+      <div class="info-label">Credentials</div>
+      <div class="info-value" style="color:#475569">n/a</div>
+    </div>"""
+
+app_tags = ""
+for a in apps:
+    if a in ("iOS", "Android"):
+        continue
+    bg = app_colors.get(a, "#6366f1")
+    app_tags += f'<span class="app-tag" style="background:{bg}">{a}</span>'
+
+dns_rows = ""
+for q in dns_queries:
+    dns_rows += f'<tr><td class="dns-cell">{q}</td></tr>\n'
+
+html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Device Details</title>
-
+<title>Device Details &mdash; {ip}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-*{
-  margin:0;
-  padding:0;
-  box-sizing:border-box;
-}
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{
+  font-family:'Inter',sans-serif;
+  background:#0b0e1a;color:#f8fafc;
+  min-height:100vh;overflow-x:hidden;
+}}
+body::before{{
+  content:'';position:fixed;top:-200px;right:-200px;
+  width:600px;height:600px;
+  background:radial-gradient(circle,rgba(139,92,246,0.12),transparent 70%);
+  pointer-events:none;z-index:0;
+}}
+body::after{{
+  content:'';position:fixed;bottom:-150px;left:-150px;
+  width:500px;height:500px;
+  background:radial-gradient(circle,rgba(59,130,246,0.1),transparent 70%);
+  pointer-events:none;z-index:0;
+}}
+.page{{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:24px 20px 60px}}
 
-body{
-  font-family:Inter,sans-serif;
-  background:linear-gradient(135deg,#0f172a,#111827);
-  color:#f8fafc;
-  padding:40px;
-}
+nav{{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 0;margin-bottom:28px;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+}}
+.nav-brand{{
+  font-size:1.6rem;font-weight:800;
+  background:linear-gradient(135deg,#3b82f6,#8b5cf6);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}}
+.nav-links{{display:flex;gap:24px}}
+.nav-links a{{color:#94a3b8;text-decoration:none;font-size:0.9rem;font-weight:500;transition:color 0.2s}}
+.nav-links a:hover{{color:#f8fafc}}
 
-.container{
-  max-width:1200px;
-  margin:auto;
-}
+.back{{
+  display:inline-flex;align-items:center;gap:6px;
+  color:#94a3b8;text-decoration:none;font-size:0.9rem;font-weight:500;
+  margin-bottom:28px;transition:color 0.2s;
+}}
+.back:hover{{color:#3b82f6}}
 
-.header{
-  margin-bottom:30px;
-}
+.page-title{{
+  font-size:2.2rem;font-weight:800;margin-bottom:8px;
+  background:linear-gradient(135deg,#3b82f6,#8b5cf6);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}}
+.page-sub{{color:#64748b;font-size:0.95rem;margin-bottom:32px}}
 
-.title{
-  font-size:2.5rem;
-  font-weight:700;
-  margin-bottom:10px;
-  background:linear-gradient(to right,#38bdf8,#818cf8);
-  -webkit-background-clip:text;
-  -webkit-text-fill-color:transparent;
-}
+.info-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:32px}}
+.info-card{{
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(255,255,255,0.06);
+  border-radius:14px;padding:18px 20px;
+  backdrop-filter:blur(16px);
+  border-left:3px solid rgba(59,130,246,0.4);
+}}
+.info-card.cred-card{{border-left-color:#10b981}}
+.info-label{{font-size:0.7rem;text-transform:uppercase;letter-spacing:1px;color:#64748b;margin-bottom:6px}}
+.info-value{{font-size:1rem;font-weight:600;font-family:'Courier New',monospace;word-break:break-all}}
+.info-value.label-text{{font-family:'Inter',sans-serif}}
 
-.card{
-  background:rgba(15,23,42,.85);
-  border:1px solid rgba(148,163,184,.15);
-  border-radius:20px;
-  padding:24px;
+.cred-value{{display:flex;align-items:center;gap:8px}}
+.cred-user{{color:#10b981}}
+.cred-sep{{color:#475569}}
+.cred-pass{{color:#f59e0b}}
+
+.section{{
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(255,255,255,0.06);
+  border-radius:16px;padding:24px;
   margin-bottom:24px;
-  backdrop-filter:blur(10px);
-}
+  backdrop-filter:blur(16px);
+}}
+.section h2{{
+  font-size:1.1rem;font-weight:700;color:#8b5cf6;margin-bottom:16px;
+  text-transform:uppercase;letter-spacing:0.5px;
+}}
 
-.card h2{
-  margin-bottom:18px;
-  color:#38bdf8;
-}
+.app-tags{{display:flex;flex-wrap:wrap;gap:8px}}
+.app-tag{{
+  padding:8px 16px;border-radius:10px;
+  font-size:0.85rem;font-weight:600;color:#fff;
+}}
 
-.info-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
-  gap:18px;
-}
+.dns-search{{
+  width:100%;padding:12px 16px;
+  border-radius:12px;border:1px solid rgba(255,255,255,0.08);
+  background:rgba(255,255,255,0.04);color:#f8fafc;
+  font-size:0.9rem;outline:none;margin-bottom:16px;
+  transition:border-color 0.2s,box-shadow 0.2s;
+}}
+.dns-search:focus{{
+  border-color:#3b82f6;
+  box-shadow:0 0 0 3px rgba(59,130,246,0.15);
+}}
+.dns-search::placeholder{{color:#475569}}
 
-.info-item{
-  background:rgba(30,41,59,.7);
-  border-radius:14px;
-  padding:18px;
-}
+.dns-table{{width:100%;border-collapse:collapse}}
+.dns-cell{{
+  padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.04);
+  font-family:'Courier New',monospace;font-size:0.85rem;color:#cbd5e1;
+}}
+.dns-cell:hover{{background:rgba(255,255,255,0.02)}}
 
-.label{
-  color:#94a3b8;
-  font-size:.85rem;
-  text-transform:uppercase;
-}
+.dns-scroll{{max-height:400px;overflow-y:auto;border-radius:12px;border:1px solid rgba(255,255,255,0.04)}}
+.dns-scroll::-webkit-scrollbar{{width:6px}}
+.dns-scroll::-webkit-scrollbar-track{{background:transparent}}
+.dns-scroll::-webkit-scrollbar-thumb{{background:rgba(255,255,255,0.1);border-radius:3px}}
 
-.value{
-  margin-top:6px;
-  font-size:1.1rem;
-  font-weight:600;
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-}
-
-th,td{
-  padding:14px;
-  text-align:left;
-  border-bottom:1px solid rgba(148,163,184,.1);
-}
-
-th{
-  color:#94a3b8;
-}
-
-.search{
-  width:100%;
-  padding:14px;
-  border:none;
-  border-radius:12px;
-  margin-bottom:18px;
-  background:#1e293b;
-  color:white;
-}
+@media(max-width:768px){{
+  .info-grid{{grid-template-columns:1fr 1fr}}
+  .page-title{{font-size:1.6rem}}
+}}
 </style>
 </head>
-"""
-
-mac_credentials_os = """
 <body>
+<div class="page">
+  <nav>
+    <div class="nav-brand">🍍 MPP</div>
+    <div class="nav-links">
+      <a href="/cgi-bin/dashboard">Dashboard</a>
+      <a href="/cgi-bin/search">DNS Queries</a>
+    </div>
+  </nav>
 
-<div class="container">
+  <a href="/cgi-bin/dashboard" class="back">&larr; Back to Dashboard</a>
 
-  <div class="header">
-    <div class="title">Device Details</div>
-    <p>Detailed Information</p>
-  </div>
+  <div class="page-title">{ip}</div>
+  <div class="page-sub">Device detected on {readable_date}</div>
 
-  <div class="card">
-    <h2>Device Information</h2>
-
-    <div class="info-grid">
-
-      <div class="info-item">
-        <div class="label">detection date</div>
-        <div class="value"><DATE></div>
-      </div>
-      
-      <div class="info-item">
-        <div class="label">IP Address</div>
-        <div class="value" id="ipAddress">192.168.1.1</div>
-      </div>
-
-      <div class="info-item">
-        <div class="label">MAC Address</div>
-        <div class="value"><MAC></div>
-      </div>
-
-      <div class="info-item">
-        <div class="label">Credentials</div>
-        <div class="value"><CREDS></div>
-      </div>
-
-      <div class="info-item">
-        <div class="label">OS</div>
-        <div class="value"><OS></div>
-      </div>
-      
-      <div class="info-item">
-        <div class="label">Hostname</div>
-        <div class="value"><HOSTNAME></div>
-      </div>
-      
-      <div class="info-item">
-        <div class="label">pcap</div>
-        <div class="value"><PCAP></div>
-      </div>
+  <div class="info-grid">
+    <div class="info-card">
+      <div class="info-label">IP Address</div>
+      <div class="info-value" id="ipDisplay">{ip}</div>
+    </div>
+    <div class="info-card">
+      <div class="info-label">MAC Address</div>
+      <div class="info-value">{mac}</div>
+    </div>
+    <div class="info-card">
+      <div class="info-label">Hostname</div>
+      <div class="info-value label-text">{hostname if hostname else "n/a"}</div>
+    </div>
+    <div class="info-card" style="border-left-color:{app_colors.get(os_type, '#6366f1') if os_type not in ('n/a', 'Mixed') else '#6366f1'}">
+      <div class="info-label">Operating System</div>
+      <div class="info-value label-text" style="color:{app_colors.get(os_type, '#94a3b8') if os_type not in ('n/a', 'Mixed') else '#f59e0b'}">{os_type}{f' ({android_score} android, {ios_score} ios)' if os_type == 'Mixed' else ''}</div>
+    </div>
+    {cred_card}
+    <div class="info-card">
+      <div class="info-label">Source PCAP</div>
+      <div class="info-value">{pcap_name}</div>
     </div>
   </div>
-"""
 
-apps = """
-<div class="card">
+  <div class="section">
     <h2>Detected Apps</h2>
-    <div class="info-grid">
-<APPS>
+    <div class="app-tags">{app_tags if app_tags else '<span style="color:#475569;font-size:0.9rem">No apps detected</span>'}</div>
+  </div>
+
+  <div class="section">
+    <h2>DNS Requests ({len(dns_queries)})</h2>
+    <input class="dns-search" type="text" id="dnsSearch" placeholder="Filter DNS queries..." onkeyup="filterDns()" />
+    <div class="dns-scroll">
+      <table class="dns-table" id="dnsTable">
+        <tbody>
+{dns_rows}        </tbody>
+      </table>
     </div>
   </div>
-"""
-
-app = """
-      <div class="info-item">
-        <div class="label"><APP></div>
-        <div class="value"><APPNAME></div>
-      </div>
-"""
-
-
-dns = """
-  <div class="card">
-    <h2>DNS Requests</h2>
-
-    <input
-      class="search"
-      type="text"
-      id="dnsSearch"
-      placeholder="Search DNS requests..."
-      onkeyup="filterTable('dnsTable','dnsSearch')"
-    >
-
-    <table id="dnsTable">
-      <tbody>
-<DNS_QUERIES>
-      </tbody>
-    </table>
-  </div>
-
 </div>
 
 <script>
+var params=new URLSearchParams(window.location.search);
+var urlIp=params.get('ip');
+if(urlIp)document.getElementById('ipDisplay').textContent=urlIp;
 
-const params = new URLSearchParams(window.location.search);
-const ip = params.get('ip');
-
-if(ip){
-  document.getElementById('ipAddress').textContent = ip;
-}
-
-function filterTable(tableId,inputId){
-
-  const filter =
-    document.getElementById(inputId)
-    .value
-    .toLowerCase();
-
-  const rows =
-    document.querySelectorAll(`#${tableId} tbody tr`);
-
-  rows.forEach(row => {
-
-    row.style.display =
-      row.innerText.toLowerCase().includes(filter)
-      ? ''
-      : 'none';
-
-  });
-}
-
+function filterDns(){{
+  var v=document.getElementById('dnsSearch').value.toLowerCase();
+  var rows=document.querySelectorAll('#dnsTable tbody tr');
+  for(var i=0;i<rows.length;i++){{
+    rows[i].style.display=rows[i].innerText.toLowerCase().indexOf(v)!==-1?'':'none';
+  }}
+}}
 </script>
-
 </body>
-</html>
-"""
-dns_entry = """
-        <tr>
-          <td><QUERY></td>
-        </tr>
-"""
+</html>"""
 
-
-
-print(head)
-
-# device information
-conn = sqlite3.connect('../data.db')
-c = conn.cursor()
-c.execute("SELECT mac, pcap, date, id FROM targets WHERE ip=?", (ip,))
-row = c.fetchone()
-ip_id = row[3]
-
-tmp = mac_credentials_os.replace("<MAC>", row[0])
-tmp = tmp.replace("<PCAP>", row[1].split("/")[len(row[1].split("/"))-1])
-readable_date = datetime.fromtimestamp(int(float(row[2]))).strftime('%Y-%m-%d %H:%M:%S')
-tmp = tmp.replace("<DATE>", readable_date)
-
-c.execute("SELECT count(id) FROM credentials WHERE target=?", (ip_id,))
-row = c.fetchone()
-if int(row[0]) == 1:
-  c.execute("SELECT username, password, hostname FROM credentials WHERE target=?", (ip_id,))
-  row = c.fetchone()
-  tmp = tmp.replace("<CREDS>", "user:" + row[0] + " pass:" + row[1])
-  tmp = tmp.replace("<HOSTNAME>", row[2])
-else:
-  tmp = tmp.replace("<CREDS>", "n/a")
-  tmp = tmp.replace("<HOSTNAME>", "n/a")
-
-device_info = tmp
-
-# apps
-c.execute("SELECT appname FROM targetapps WHERE target=?", (ip_id,))
-rows = c.fetchall()
-all_apps = ""
-
-different_apps = set()
-for c_app in rows:
-  tmp = app.replace("<APP>", "DEVICE/APP")
-  c.execute("SELECT app from apps WHERE id=?", (c_app[0],))
-  row = c.fetchone()
-  if row[0] not in different_apps:
-    all_apps += tmp.replace("<APPNAME>", row[0])
-    different_apps.add(row[0])
-
-os_type = "n/a"
-for item in different_apps:
-  if item == "Android" or item == "iPhone":
-    os_type = item
-
-print(device_info.replace("<OS>", os_type))
-print(apps.replace("<APPS>", all_apps))
-
-# dns queries
-c.execute("SELECT distinct query FROM dns_queries WHERE ip=?", (ip_id,))
-rows = c.fetchall()
-
-all_entries = ""
-for query in rows:
-  all_entries += dns_entry.replace("<QUERY>", query[0])
-print(dns.replace("<DNS_QUERIES>", all_entries))
-
-conn.close()
+print("Content-Type: text/html")
+print()
+print(html)
